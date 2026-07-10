@@ -5,7 +5,7 @@ resources:
   apps:
     agent_langgraph:
       name: "agent-langgraph"
-      description: "LangGraph agent application"
+      description: "Foundry A2A passthrough agent application"
       source_code_path: ./
       config:
         command: ["uv", "run", "start-app"]
@@ -22,6 +22,27 @@ resources:
             value: "300"
           - name: MLFLOW_EXPERIMENT_ID
             value_from: "experiment"
+          - name: FOUNDRY_A2A_ENDPOINT
+            value: "https://<your-foundry-account>.services.ai.azure.com/api/projects/<project-id>/agents/<agent-id>/endpoint/protocols/a2a"
+          - name: FOUNDRY_AGENT_NAME
+            value: "<your-foundry-agent-name>"
+          - name: FOUNDRY_A2A_SCOPE
+            value: "api://<remote-foundry-agent-app-id>/.default"
+          - name: ENTRA_TENANT_ID
+            value: "<your-tenant-id>"
+          - name: ENTRA_AGENT_CLIENT_ID
+            value: "<your-agent-identity-client-id>"
+          - name: ENTRA_AGENT_CLIENT_SECRET
+            value_from:
+              secret:
+                scope: foundry-a2a
+                key: entra-agent-client-secret
+          - name: ENTRA_AGENT_CLIENT_CERTIFICATE_PATH
+            value: ""
+          - name: ENTRA_AGENT_CLIENT_CERTIFICATE_THUMBPRINT
+            value: ""
+          - name: ENTRA_AGENT_FEDERATED_TOKEN_FILE
+            value: ""
 
       # Resources which this app has access to
       resources:

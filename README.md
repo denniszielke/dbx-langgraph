@@ -2,9 +2,26 @@
 
 This template defines a conversational agent app. The app comes with a built-in chat UI, but also exposes an API endpoint for invoking the agent so that you can serve your UI elsewhere (e.g. on your website or in a mobile app).
 
-The agent in this template implements the [OpenAI Responses API](https://platform.openai.com/docs/api-reference/responses) interface. It ships with a sample `get_current_time` tool. The agent code includes commented-out examples showing how to connect to [Databricks MCP servers](https://docs.databricks.com/aws/en/generative-ai/agent-framework/agent-tool) (including the built-in code interpreter, Vector Search, Genie, and UC functions). You can customize agent code and test it via the API or UI.
+The agent in this template implements the [OpenAI Responses API](https://platform.openai.com/docs/api-reference/responses) interface, but it now runs as a pure passthrough. Instead of running a local LLM or LangGraph loop, every incoming request is forwarded to a remote Microsoft Foundry hosted agent over its A2A endpoint and the remote response is translated back into MLflow `ResponsesAgent` events.
 
 The agent input and output format are defined by MLflow's ResponsesAgent interface, which closely follows the [OpenAI Responses API](https://platform.openai.com/docs/api-reference/responses) interface. See [the MLflow docs](https://mlflow.org/docs/latest/genai/flavors/responses-agent-intro/) for input and output formats for streaming and non-streaming requests, tracing requirements, and other agent authoring details.
+
+## Foundry A2A passthrough mode
+
+This repository is configured for a **no-local-model** deployment model:
+
+- Databricks hosts the API surface (`/invocations`, `/responses`, chat UI, MLflow tracing)
+- `agent_server/agent.py` forwards each request directly to a remote Foundry A2A endpoint
+- `agent_server/a2a_client.py` authenticates with **Microsoft Entra Agent ID** credentials and calls the remote hosted agent
+- streamed A2A events are converted back into MLflow `ResponsesAgentStreamEvent` text deltas plus a final output item
+
+Compared with the default LangGraph template, there is **no `ChatDatabricks` model client, no local agent loop, and no tool execution inside Databricks**. Databricks is only acting as the passthrough boundary and deployment host.
+
+Reference documentation:
+
+- [Enable incoming A2A on a Foundry agent](https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/enable-agent-to-agent-endpoint)
+- [Autonomous authentication and authorization flow for Entra Agent ID](https://learn.microsoft.com/en-us/entra/agent-id/autonomous-agent-authentication-authorization-flow)
+- [Create or delete Entra Agent identities](https://learn.microsoft.com/en-us/entra/agent-id/create-delete-agent-identities)
 
 ## Build with AI Assistance
 
@@ -98,7 +115,34 @@ This will start the agent server and the chat app at http://localhost:8000.
 
    See the [MLflow experiments documentation](https://docs.databricks.com/aws/en/mlflow/experiments#create-experiment-from-the-workspace).
 
-4. **Test your agent locally**
+4. **Provision an Entra Agent ID credential for the Foundry A2A target**
+
+   Before you can run this passthrough agent, create an Entra Agent ID plus an autonomous credential for it:
+
+   ```bash
+   uv run create-agent-identity --display-name agent-langgraph-foundry
+   ```
+
+   The script creates:
+
+   - an **agent identity blueprint**
+   - an **agent identity**
+   - either a **certificate** credential (default) or a **client secret** fallback
+
+   It then prints the exact `ENTRA_*` values to copy into `.env`. For deploys, store secrets in a Databricks secret scope and wire them into `databricks.yml`.
+
+   > Prerequisite: authenticate first with `az login` or another credential source supported by `DefaultAzureCredential`, and ensure you have the Graph permissions required by the Agent ID beta APIs.
+
+5. **Configure the remote Foundry A2A endpoint**
+
+   Update `.env` with:
+
+   - `FOUNDRY_A2A_ENDPOINT` — the hosted agent A2A endpoint, usually ending in `/endpoint/protocols/a2a`
+   - `FOUNDRY_AGENT_NAME` — the remote agent name or id for logging/tracing
+   - `FOUNDRY_A2A_SCOPE` — the Entra resource scope accepted by the remote A2A endpoint, typically `api://<remote-agent-app-id>/.default`
+   - `ENTRA_TENANT_ID`, `ENTRA_AGENT_CLIENT_ID`, and one of the supported credential settings (`ENTRA_AGENT_CLIENT_SECRET`, or the certificate/federated equivalents)
+
+6. **Test your agent locally**
 
    Start up the agent server and chat UI locally:
 
@@ -131,11 +175,17 @@ This will start the agent server and the chat app at http://localhost:8000.
 
 ## Modifying your agent
 
-See the [LangGraph documentation](https://docs.langchain.com/oss/python/langgraph/quickstart) for more information on how to edit your own agent.
+This template is now centered on the Foundry passthrough path:
+
+- `agent_server/agent.py` keeps the MLflow `@invoke()` / `@stream()` handlers
+- `agent_server/a2a_client.py` handles Entra Agent ID auth plus the outbound A2A HTTP calls
+- `agent_server/utils.py` converts between MLflow Responses input/output shapes and A2A payloads
+
+If you need to change the forwarding behavior, update those files rather than adding a local model loop.
 
 Required files for hosting with MLflow `AgentServer`:
 
-- `agent.py`: Contains your agent logic. Modify this file to create your custom agent. For example, you can [add agent tools](https://docs.databricks.com/aws/en/generative-ai/agent-framework/agent-tool) to give your agent additional capabilities
+- `agent.py`: Contains the passthrough handler logic that forwards requests to the remote Foundry A2A agent
 - `start_server.py`: Initializes and runs the MLflow `AgentServer` with agent_type="ResponsesAgent". You don't have to modify this file for most common use cases, but can add additional server routes (e.g. a `/metrics` endpoint) here
 
 **Common customization questions:**
@@ -150,7 +200,7 @@ Run `uv add <package_name>` (e.g., `uv add "mlflow-skinny[databricks]"`). See th
 Yes. This template uses MLflow's agent server, which comes with automatic tracing for agent logic decorated with `@invoke()` and `@stream()`. It also uses [MLflow autologging APIs](https://mlflow.org/docs/latest/genai/tracing/#one-line-auto-tracing-integrations) to capture traces from LLM invocations. However, you can add additional instrumentation to capture more granular trace information when your agent runs. See the [MLflow tracing documentation](https://docs.databricks.com/aws/en/mlflow3/genai/tracing/app-instrumentation/).
 
 **Q: How can I extend this example with additional tools and capabilities?**
-This template can be extended by integrating additional MCP servers, Vector Search Indexes, UC Functions, and other Databricks tools. See the ["Agent Framework Tools Documentation"](https://docs.databricks.com/aws/en/generative-ai/agent-framework/agent-tool).
+The intended extension point is the remote Foundry agent. Add tools, instructions, or orchestration there, and let Databricks continue forwarding requests over A2A.
 
 ## Evaluating your agent
 
@@ -190,6 +240,8 @@ Ensure you have the [Databricks CLI](https://docs.databricks.com/aws/en/dev-tool
    databricks bundle validate
    ```
 
+   Before deploying, make sure the Foundry A2A env vars in `databricks.yml` are filled in and that any sensitive `ENTRA_*` value is referenced from a Databricks secret scope instead of an inline literal.
+
 3. **Deploy the bundle**
 
    This uploads your code and configures resources (MLflow experiment, serving endpoints, etc.) defined in `databricks.yml`:
@@ -210,7 +262,7 @@ Ensure you have the [Databricks CLI](https://docs.databricks.com/aws/en/dev-tool
 
    **On-behalf-of (OBO) User Authentication**: Use `get_user_workspace_client()` from `agent_server.utils` to authenticate as the requesting user instead of the app service principal. See the [OBO authentication documentation](https://docs.databricks.com/aws/en/dev-tools/databricks-apps/auth?language=Streamlit#retrieve-user-authorization-credentials).
 
-5. **Query your agent hosted on Databricks Apps**
+7. **Query your agent hosted on Databricks Apps**
 
    You must use a Databricks OAuth token to query agents hosted on Databricks Apps. See [Query an agent](https://docs.databricks.com/aws/en/generative-ai/agent-framework/query-agent) for full details.
 

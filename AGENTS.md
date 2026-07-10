@@ -133,6 +133,7 @@ After installation, the skills will be available as slash commands (e.g., `/agen
 |------|---------|
 | Setup | `uv run quickstart` |
 | Discover tools | `uv run discover-tools` |
+| Create Entra Agent ID | `uv run create-agent-identity --display-name agent-your-name` |
 | Run locally | `uv run start-app` |
 | Deploy | `databricks bundle deploy && databricks bundle run agent_langgraph` |
 | View logs | `databricks apps logs <app-name> --follow` |
@@ -143,13 +144,15 @@ After installation, the skills will be available as slash commands (e.g., `/agen
 
 | File | Purpose |
 |------|---------|
-| `agent_server/agent.py` | Agent logic, model, instructions, MCP servers |
+| `agent_server/agent.py` | ResponsesAgent handlers that forward requests to the remote Foundry A2A agent |
+| `agent_server/a2a_client.py` | Entra Agent ID auth + Foundry A2A HTTP client |
 | `agent_server/start_server.py` | FastAPI server + MLflow setup |
 | `agent_server/evaluate_agent.py` | Agent evaluation with MLflow scorers |
 | `databricks.yml` | Bundle config & resource permissions |
 | `.github/workflows/deploy.yml` | GitHub Actions workflow to deploy this app (synced from `.scripts/source/.github/workflows/`) |
 | `scripts/quickstart.py` | One-command setup script |
 | `scripts/discover_tools.py` | Discovers available workspace resources |
+| `scripts/create_agent_identity.py` | Creates or deletes Entra Agent ID blueprints, identities, and credentials |
 
 ---
 

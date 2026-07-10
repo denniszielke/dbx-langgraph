@@ -5,7 +5,7 @@ resources:
   apps:
     agent_langgraph:
       name: "agent-langgraph"
-      description: "LangGraph agent application"
+      description: "Foundry A2A passthrough agent application"
       source_code_path: ./
       config:
         command: ["uv", "run", "start-app"]
@@ -22,6 +22,28 @@ resources:
             value: "300"
           - name: MLFLOW_EXPERIMENT_ID
             value_from: "experiment"
+          # Replace each REPLACE_ME value below with your real Foundry/Entra settings.
+          - name: FOUNDRY_A2A_ENDPOINT
+            value: "REPLACE_ME_FOUNDRY_A2A_ENDPOINT"
+          - name: FOUNDRY_AGENT_NAME
+            value: "REPLACE_ME_FOUNDRY_AGENT_NAME"
+          - name: FOUNDRY_A2A_SCOPE
+            value: "REPLACE_ME_FOUNDRY_A2A_SCOPE"
+          - name: ENTRA_TENANT_ID
+            value: "REPLACE_ME_ENTRA_TENANT_ID"
+          - name: ENTRA_AGENT_CLIENT_ID
+            value: "REPLACE_ME_ENTRA_AGENT_CLIENT_ID"
+          - name: ENTRA_AGENT_CLIENT_SECRET
+            value_from:
+              secret:
+                scope: foundry-a2a
+                key: entra-agent-client-secret
+          - name: ENTRA_AGENT_CLIENT_CERTIFICATE_PATH
+            value: ""
+          - name: ENTRA_AGENT_CLIENT_CERTIFICATE_THUMBPRINT
+            value: ""
+          - name: ENTRA_AGENT_FEDERATED_TOKEN_FILE
+            value: ""
 
       # Resources which this app has access to
       resources:

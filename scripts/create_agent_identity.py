@@ -79,6 +79,11 @@ def parse_args() -> argparse.Namespace:
         help="Validity window in days for the generated secret or certificate.",
     )
     parser.add_argument(
+        "--output-env-file",
+        default=".agent-identity.env",
+        help="Where to write the generated ENTRA_* environment values (default: .agent-identity.env).",
+    )
+    parser.add_argument(
         "--delete",
         metavar="AGENT_IDENTITY_OBJECT_ID",
         help="Delete an existing agent identity object instead of creating one.",
@@ -291,26 +296,53 @@ def delete_blueprint(graph: GraphClient, blueprint_object_id: str) -> None:
 
 
 def print_env_instructions(
+    output_env_file: Path,
     tenant_id: str,
     agent_identity: dict[str, Any],
     secret_credential: dict[str, Any] | None,
     certificate_credential: dict[str, str] | None,
     blueprint: dict[str, Any],
 ) -> None:
-    print_header("Copy these values into /home/runner/work/dbx-langgraph/dbx-langgraph/.env")
+    lines = [
+        f"ENTRA_TENANT_ID={tenant_id}",
+        f"ENTRA_AGENT_CLIENT_ID={agent_identity['appId']}",
+    ]
+    if secret_credential is not None:
+        lines.append(f"ENTRA_AGENT_CLIENT_SECRET={secret_credential['secretText']}")
+    if certificate_credential is not None:
+        lines.extend(
+            [
+                "ENTRA_AGENT_CLIENT_CERTIFICATE_PATH="
+                f"{certificate_credential['bundle_path']}",
+                "ENTRA_AGENT_CLIENT_CERTIFICATE_THUMBPRINT="
+                f"{certificate_credential['thumbprint']}",
+            ]
+        )
+    lines.extend(
+        [
+            "# Set this to the remote Foundry A2A resource scope, e.g. api://<remote-agent-app-id>/.default",
+            "FOUNDRY_A2A_SCOPE=",
+        ]
+    )
+
+    output_env_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    os.chmod(output_env_file, 0o600)
+
+    print_header("Generated environment values")
+    print(f"Wrote exact ENTRA_* values to {output_env_file.resolve()}")
     print(f"ENTRA_TENANT_ID={tenant_id}")
     print(f"ENTRA_AGENT_CLIENT_ID={agent_identity['appId']}")
     if secret_credential is not None:
-        print(f"ENTRA_AGENT_CLIENT_SECRET={secret_credential['secretText']}")
+        print("ENTRA_AGENT_CLIENT_SECRET=<written to secure env file>")
     if certificate_credential is not None:
         print(
-            f"ENTRA_AGENT_CLIENT_CERTIFICATE_PATH={certificate_credential['bundle_path']}"
+            "ENTRA_AGENT_CLIENT_CERTIFICATE_PATH="
+            f"{certificate_credential['bundle_path']}"
         )
         print(
             "ENTRA_AGENT_CLIENT_CERTIFICATE_THUMBPRINT="
             f"{certificate_credential['thumbprint']}"
         )
-    print("# Set this to the remote Foundry A2A resource scope, e.g. api://<remote-agent-app-id>/.default")
     print("FOUNDRY_A2A_SCOPE=")
     print()
     print("Helpful IDs:")
@@ -385,6 +417,7 @@ def main() -> None:
         print_success("Attached client secret to the agent identity")
 
     print_env_instructions(
+        output_env_file=Path(args.output_env_file),
         tenant_id=tenant_id,
         agent_identity=agent_identity,
         secret_credential=secret_credential,

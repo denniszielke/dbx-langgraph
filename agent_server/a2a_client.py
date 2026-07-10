@@ -61,11 +61,14 @@ class FoundryA2AClient:
         endpoint: str,
         agent_name: str,
         auth: EntraAgentAuthConfig,
+        timeout_seconds: float = 300.0,
     ) -> None:
         self.endpoint = endpoint.rstrip("/")
         self.agent_name = agent_name
         self._auth = auth
-        self._http = httpx.AsyncClient(timeout=httpx.Timeout(30.0, read=None))
+        self._http = httpx.AsyncClient(
+            timeout=httpx.Timeout(timeout_seconds, connect=30.0)
+        )
         self._token_lock = asyncio.Lock()
         self._cached_token: str | None = None
         self._cached_token_expires_at = 0.0
@@ -77,6 +80,7 @@ class FoundryA2AClient:
             endpoint=_require_env("FOUNDRY_A2A_ENDPOINT"),
             agent_name=_require_env("FOUNDRY_AGENT_NAME"),
             auth=EntraAgentAuthConfig.from_env(),
+            timeout_seconds=float(os.getenv("FOUNDRY_A2A_TIMEOUT_SECONDS", "300")),
         )
 
     def _build_msal_app(self) -> msal.ConfidentialClientApplication | None:

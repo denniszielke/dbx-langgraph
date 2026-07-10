@@ -96,11 +96,9 @@ async def process_a2a_stream_events(
         if current_text.startswith(aggregated_text):
             delta = current_text[len(aggregated_text) :]
             aggregated_text = current_text
-        elif aggregated_text and current_text in aggregated_text:
-            delta = ""
         else:
-            delta = current_text if not aggregated_text else current_text
-            aggregated_text = aggregated_text + delta if aggregated_text else current_text
+            delta = current_text
+            aggregated_text = aggregated_text + current_text if aggregated_text else current_text
 
         if delta:
             yield ResponsesAgentStreamEvent(**create_text_delta(delta=delta, item_id=item_id))

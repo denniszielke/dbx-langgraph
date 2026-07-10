@@ -129,7 +129,7 @@ This will start the agent server and the chat app at http://localhost:8000.
    - an **agent identity**
    - either a **certificate** credential (default) or a **client secret** fallback
 
-   It then prints the exact `ENTRA_*` values to copy into `.env`. For deploys, store secrets in a Databricks secret scope and wire them into `databricks.yml`.
+   It then writes the exact `ENTRA_*` values into `.agent-identity.env` (chmod `600`) and prints the non-secret values you need to copy into `.env`. For deploys, store secrets in a Databricks secret scope and wire them into `databricks.yml`.
 
    > Prerequisite: authenticate first with `az login` or another credential source supported by `DefaultAzureCredential`, and ensure you have the Graph permissions required by the Agent ID beta APIs.
 

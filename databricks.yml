@@ -22,16 +22,17 @@ resources:
             value: "300"
           - name: MLFLOW_EXPERIMENT_ID
             value_from: "experiment"
+          # Replace each REPLACE_ME value below with your real Foundry/Entra settings.
           - name: FOUNDRY_A2A_ENDPOINT
-            value: "https://<your-foundry-account>.services.ai.azure.com/api/projects/<project-id>/agents/<agent-id>/endpoint/protocols/a2a"
+            value: "REPLACE_ME_FOUNDRY_A2A_ENDPOINT"
           - name: FOUNDRY_AGENT_NAME
-            value: "<your-foundry-agent-name>"
+            value: "REPLACE_ME_FOUNDRY_AGENT_NAME"
           - name: FOUNDRY_A2A_SCOPE
-            value: "api://<remote-foundry-agent-app-id>/.default"
+            value: "REPLACE_ME_FOUNDRY_A2A_SCOPE"
           - name: ENTRA_TENANT_ID
-            value: "<your-tenant-id>"
+            value: "REPLACE_ME_ENTRA_TENANT_ID"
           - name: ENTRA_AGENT_CLIENT_ID
-            value: "<your-agent-identity-client-id>"
+            value: "REPLACE_ME_ENTRA_AGENT_CLIENT_ID"
           - name: ENTRA_AGENT_CLIENT_SECRET
             value_from:
               secret:

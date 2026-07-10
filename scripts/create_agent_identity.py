@@ -135,7 +135,7 @@ def _tenant_id_from_access_token(access_token: str) -> str | None:
         decoded = base64.urlsafe_b64decode(payload + padding)
         claims = json.loads(decoded)
         return claims.get("tid")
-    except Exception:
+    except (IndexError, ValueError, json.JSONDecodeError):
         return None
 
 
@@ -250,10 +250,13 @@ def add_certificate_credential(
             capture_output=True,
             text=True,
         )
-        .stdout.strip()
-        .split("=", maxsplit=1)[1]
-        .replace(":", "")
     )
+    fingerprint_output = thumbprint.stdout.strip()
+    if "=" not in fingerprint_output:
+        raise RuntimeError(
+            f"Unexpected openssl fingerprint output: {fingerprint_output or '<empty>'}"
+        )
+    thumbprint_value = fingerprint_output.split("=", maxsplit=1)[1].replace(":", "")
 
     existing_keys = agent_identity.get("keyCredentials") or []
     now = datetime.now(UTC)
@@ -275,7 +278,7 @@ def add_certificate_credential(
 
     return {
         "bundle_path": str(bundle_path.resolve()),
-        "thumbprint": thumbprint,
+        "thumbprint": thumbprint_value,
         "certificate_path": str(cert_path.resolve()),
         "private_key_path": str(key_path.resolve()),
     }

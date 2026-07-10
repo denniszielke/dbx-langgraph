@@ -9,6 +9,8 @@ from uuid import uuid4
 import httpx
 import msal
 
+MAX_ERROR_BODY_LENGTH = 2000
+
 
 def _require_env(name: str) -> str:
     value = os.getenv(name)
@@ -91,8 +93,12 @@ class FoundryA2AClient:
         if self._auth.client_secret:
             client_credential = self._auth.client_secret
         else:
-            assert self._auth.certificate_path is not None
-            assert self._auth.certificate_thumbprint is not None
+            if not self._auth.certificate_path or not self._auth.certificate_thumbprint:
+                raise ValueError(
+                    "Certificate authentication requires both "
+                    "ENTRA_AGENT_CLIENT_CERTIFICATE_PATH and "
+                    "ENTRA_AGENT_CLIENT_CERTIFICATE_THUMBPRINT."
+                )
             with open(self._auth.certificate_path, encoding="utf-8") as handle:
                 pem_bundle = handle.read()
             client_credential = {
@@ -124,7 +130,8 @@ class FoundryA2AClient:
             if not access_token:
                 raise RuntimeError(
                     "Failed to acquire access token for Entra Agent ID authentication: "
-                    f"{token_result.get('error')}: {token_result.get('error_description')}"
+                    f"{token_result.get('error')}: "
+                    f"{str(token_result.get('error_description'))[:MAX_ERROR_BODY_LENGTH]}"
                 )
 
             expires_in = int(token_result.get("expires_in") or 3600)
@@ -136,14 +143,16 @@ class FoundryA2AClient:
         if self._auth.federated_token_file:
             return await self._acquire_federated_token()
 
-        assert self._msal_app is not None
+        if self._msal_app is None:
+            raise RuntimeError("MSAL application is not configured for this credential type.")
         return await asyncio.to_thread(
             self._msal_app.acquire_token_for_client,
             scopes=[self._auth.scope],
         )
 
     async def _acquire_federated_token(self) -> dict[str, Any]:
-        assert self._auth.federated_token_file is not None
+        if not self._auth.federated_token_file:
+            raise RuntimeError("ENTRA_AGENT_FEDERATED_TOKEN_FILE is required for federated auth.")
         token_endpoint = (
             f"https://login.microsoftonline.com/{self._auth.tenant_id}/oauth2/v2.0/token"
         )
@@ -288,7 +297,7 @@ class FoundryA2AClient:
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
-            body = exc.response.text[:2000]
+            body = exc.response.text[:MAX_ERROR_BODY_LENGTH]
             raise RuntimeError(
                 f"{message} (status={exc.response.status_code}): {body}"
             ) from exc

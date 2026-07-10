@@ -76,7 +76,11 @@ def _content_to_a2a_parts(content: Any) -> list[dict[str, Any]]:
                     parts.append({"kind": "data", "data": item})
 
     if not parts:
-        parts.append({"kind": "text", "text": json.dumps(content, sort_keys=True)})
+        try:
+            serialized = json.dumps(content, sort_keys=True)
+        except (TypeError, ValueError):
+            serialized = str(content)
+        parts.append({"kind": "text", "text": serialized})
     return parts
 
 

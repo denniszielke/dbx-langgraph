@@ -256,7 +256,7 @@ def add_certificate_credential(
     if "=" not in fingerprint_output:
         raise RuntimeError(
             "Unexpected openssl fingerprint output "
-            f"(expected format: SHA1 Fingerprint=XX:XX:...): {fingerprint_output or '<empty>'}"
+            f"(expected OpenSSL fingerprint output with a '=' separator): {fingerprint_output or '<empty>'}"
         )
     thumbprint_value = fingerprint_output.split("=", maxsplit=1)[1].replace(":", "")
 

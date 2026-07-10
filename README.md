@@ -262,7 +262,7 @@ Ensure you have the [Databricks CLI](https://docs.databricks.com/aws/en/dev-tool
 
    **On-behalf-of (OBO) User Authentication**: Use `get_user_workspace_client()` from `agent_server.utils` to authenticate as the requesting user instead of the app service principal. See the [OBO authentication documentation](https://docs.databricks.com/aws/en/dev-tools/databricks-apps/auth?language=Streamlit#retrieve-user-authorization-credentials).
 
-7. **Query your agent hosted on Databricks Apps**
+6. **Query your agent hosted on Databricks Apps**
 
    You must use a Databricks OAuth token to query agents hosted on Databricks Apps. See [Query an agent](https://docs.databricks.com/aws/en/generative-ai/agent-framework/query-agent) for full details.
 

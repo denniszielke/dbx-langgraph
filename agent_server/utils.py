@@ -106,6 +106,8 @@ async def process_a2a_stream_events(
             delta = current_text[len(aggregated_text) :]
             aggregated_text = current_text
         else:
+            # Some A2A implementations emit non-prefix snapshots instead of pure deltas.
+            # When that happens, fall back to treating the payload as incremental text.
             delta = current_text
             aggregated_text = aggregated_text + current_text if aggregated_text else current_text
 

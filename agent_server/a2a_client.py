@@ -10,6 +10,7 @@ import httpx
 import msal
 
 MAX_ERROR_BODY_LENGTH = 2000
+TOKEN_REFRESH_BUFFER_SECONDS = 60
 
 
 def _require_env(name: str) -> str:
@@ -102,7 +103,8 @@ class FoundryA2AClient:
                 raise ValueError(
                     "Certificate authentication requires both "
                     "ENTRA_AGENT_CLIENT_CERTIFICATE_PATH and "
-                    "ENTRA_AGENT_CLIENT_CERTIFICATE_THUMBPRINT."
+                    "ENTRA_AGENT_CLIENT_CERTIFICATE_THUMBPRINT. "
+                    "Set those environment variables for certificate authentication."
                 )
             with open(self._auth.certificate_path, encoding="utf-8") as handle:
                 pem_bundle = handle.read()
@@ -123,11 +125,17 @@ class FoundryA2AClient:
         )
 
     async def get_access_token(self) -> str:
-        if self._cached_token and time.time() < self._cached_token_expires_at - 60:
+        if (
+            self._cached_token
+            and time.time() < self._cached_token_expires_at - TOKEN_REFRESH_BUFFER_SECONDS
+        ):
             return self._cached_token
 
         async with self._token_lock:
-            if self._cached_token and time.time() < self._cached_token_expires_at - 60:
+            if (
+                self._cached_token
+                and time.time() < self._cached_token_expires_at - TOKEN_REFRESH_BUFFER_SECONDS
+            ):
                 return self._cached_token
 
             token_result = await self._acquire_access_token()
@@ -156,10 +164,8 @@ class FoundryA2AClient:
         )
 
     async def _acquire_federated_token(self) -> dict[str, Any]:
-        if not self._auth.federated_token_file:
-            raise RuntimeError("ENTRA_AGENT_FEDERATED_TOKEN_FILE is required for federated auth.")
         token_endpoint = f"https://login.microsoftonline.com/{self._auth.tenant_id}/oauth2/v2.0/token"
-        with open(self._auth.federated_token_file, encoding="utf-8") as handle:
+        with open(self._auth.federated_token_file, encoding="utf-8") as handle:  # type: ignore[arg-type]
             assertion = handle.read().strip()
 
         response = await self._http.post(

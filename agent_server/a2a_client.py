@@ -16,6 +16,11 @@ def _require_env(name: str) -> str:
     value = os.getenv(name)
     if not value:
         raise ValueError(f"Missing required environment variable: {name}")
+    if value.startswith("REPLACE_ME_"):
+        raise ValueError(
+            f"Environment variable {name} still has the placeholder value {value}. "
+            "Update your .env or Databricks app configuration before starting the agent."
+        )
     return value
 
 
@@ -131,7 +136,7 @@ class FoundryA2AClient:
                 raise RuntimeError(
                     "Failed to acquire access token for Entra Agent ID authentication: "
                     f"{token_result.get('error')}: "
-                    f"{str(token_result.get('error_description'))[:MAX_ERROR_BODY_LENGTH]}"
+                    f"{(token_result.get('error_description') or '')[:MAX_ERROR_BODY_LENGTH]}"
                 )
 
             expires_in = int(token_result.get("expires_in") or 3600)
@@ -153,9 +158,7 @@ class FoundryA2AClient:
     async def _acquire_federated_token(self) -> dict[str, Any]:
         if not self._auth.federated_token_file:
             raise RuntimeError("ENTRA_AGENT_FEDERATED_TOKEN_FILE is required for federated auth.")
-        token_endpoint = (
-            f"https://login.microsoftonline.com/{self._auth.tenant_id}/oauth2/v2.0/token"
-        )
+        token_endpoint = f"https://login.microsoftonline.com/{self._auth.tenant_id}/oauth2/v2.0/token"
         with open(self._auth.federated_token_file, encoding="utf-8") as handle:
             assertion = handle.read().strip()
 

@@ -37,9 +37,14 @@ def get_databricks_host_from_env() -> Optional[str]:
 
 
 def build_a2a_message(request: ResponsesAgentRequest) -> dict[str, Any]:
+    if not request.input:
+        raise ValueError("ResponsesAgentRequest.input must contain at least one input item")
+
     chat_messages = to_chat_completions_input([item.model_dump() for item in request.input])
     if not chat_messages:
-        raise ValueError("ResponsesAgentRequest.input must contain at least one message")
+        raise ValueError(
+            "ResponsesAgentRequest.input could not be converted into a valid A2A message"
+        )
 
     last_message = chat_messages[-1]
     metadata: dict[str, Any] = {"history_length": len(request.input)}

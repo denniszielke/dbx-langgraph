@@ -117,7 +117,7 @@ This will start the agent server and the chat app at http://localhost:8000.
 
 4. **Provision an Entra Agent ID credential for the Foundry A2A target**
 
-   Before you can run this passthrough agent, create an Entra Agent ID plus an autonomous credential for it:
+   Before you can run this passthrough agent, create an Entra Agent ID and an autonomous credential for it:
 
    ```bash
    uv run create-agent-identity --display-name agent-langgraph-foundry

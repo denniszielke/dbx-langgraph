@@ -20,6 +20,7 @@ import argparse
 import base64
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -206,7 +207,7 @@ def add_certificate_credential(
     _require_openssl()
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    safe_name = agent_identity["displayName"].replace(" ", "-").lower()
+    safe_name = re.sub(r"[^a-z0-9._-]+", "-", agent_identity["displayName"].lower()).strip("-")
     key_path = output_dir / f"{safe_name}.key.pem"
     cert_path = output_dir / f"{safe_name}.cert.pem"
     bundle_path = output_dir / f"{safe_name}.pem"
@@ -243,7 +244,7 @@ def add_certificate_credential(
         check=True,
         capture_output=True,
     ).stdout
-    thumbprint = (
+    fingerprint_result = (
         subprocess.run(
             ["openssl", "x509", "-fingerprint", "-sha1", "-noout", "-in", str(cert_path)],
             check=True,
@@ -251,10 +252,11 @@ def add_certificate_credential(
             text=True,
         )
     )
-    fingerprint_output = thumbprint.stdout.strip()
+    fingerprint_output = fingerprint_result.stdout.strip()
     if "=" not in fingerprint_output:
         raise RuntimeError(
-            f"Unexpected openssl fingerprint output: {fingerprint_output or '<empty>'}"
+            "Unexpected openssl fingerprint output "
+            f"(expected format: SHA1 Fingerprint=XX:XX:...): {fingerprint_output or '<empty>'}"
         )
     thumbprint_value = fingerprint_output.split("=", maxsplit=1)[1].replace(":", "")
 
@@ -321,7 +323,7 @@ def print_env_instructions(
         )
     lines.extend(
         [
-            "# Set this to the remote Foundry A2A resource scope, e.g. api://<remote-agent-app-id>/.default",
+            "# Set this to the remote Foundry A2A resource scope, e.g., api://<remote-agent-app-id>/.default",
             "FOUNDRY_A2A_SCOPE=",
         ]
     )

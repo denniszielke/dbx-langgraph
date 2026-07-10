@@ -310,8 +310,6 @@ def print_env_instructions(
         f"ENTRA_TENANT_ID={tenant_id}",
         f"ENTRA_AGENT_CLIENT_ID={agent_identity['appId']}",
     ]
-    if secret_credential is not None:
-        lines.append(f"ENTRA_AGENT_CLIENT_SECRET={secret_credential['secretText']}")
     if certificate_credential is not None:
         lines.extend(
             [
@@ -336,7 +334,10 @@ def print_env_instructions(
     print(f"ENTRA_TENANT_ID={tenant_id}")
     print(f"ENTRA_AGENT_CLIENT_ID={agent_identity['appId']}")
     if secret_credential is not None:
-        print("ENTRA_AGENT_CLIENT_SECRET=<written to secure env file>")
+        print(
+            "ENTRA_AGENT_CLIENT_SECRET=<not written to disk; create a Databricks secret "
+            "or rerun with certificate mode for a file-based credential>"
+        )
     if certificate_credential is not None:
         print(
             "ENTRA_AGENT_CLIENT_CERTIFICATE_PATH="

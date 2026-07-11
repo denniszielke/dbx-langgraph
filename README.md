@@ -181,16 +181,17 @@ The `create-agent-identity` command (used in step 4 above) creates two Entra obj
 - an **agent identity blueprint** (`microsoft.graph.agentIdentityBlueprint`) — a reusable template for a class of agents
 - an **agent identity** (`microsoft.graph.agentIdentity`) — the concrete, auditable identity used for the Foundry A2A calls
 
-These are the same objects that **Microsoft Agent 365** — Microsoft's tenant-wide control plane for registering, securing, and observing AI agents — uses to populate its **Agent Registry** and observability dashboards. You don't need a second identity: register/enroll the identity created by `create-agent-identity` into Agent 365 rather than creating a new one.
+These are the same objects that **Microsoft Agent 365** — Microsoft's control plane for registering, securing, and observing AI agents — uses to populate its **Agent Registry**. You don't need a second identity: register the identity created by `create-agent-identity` into Agent 365 rather than creating a new one.
 
-Microsoft also ships an **Agent 365 CLI** as an option for enrolling an already-created agent identity into the registry. It's useful for scripting enrollment in CI/CD alongside `databricks bundle deploy`, as an alternative to enrolling through the admin center UI by hand. Command names are still evolving in preview, so confirm exact syntax against current Microsoft docs before scripting it.
+Microsoft also ships an official **Agent 365 DevTools CLI** (`a365`, from [microsoft/Agent365-devTools](https://github.com/microsoft/Agent365-devTools), installed via `dotnet tool install -g Microsoft.Agents.A365.DevTools.Cli --prerelease`) as an alternative to the Graph-based `create-agent-identity` script — its `a365 setup` command creates Azure resources and registers the agent blueprint, and `a365 query-entra` checks scopes/permissions/consent status for an existing identity.
 
-Once enrolled, you can see the agent and its activity from the Agent 365 side:
+Once registered, you can see the agent's **identity and registry metadata** from the Agent 365 side immediately:
 
-1. Open the Agent 365 admin center (or the Agent 365 pane in the Microsoft 365 admin center) for the tenant matching `ENTRA_TENANT_ID`.
+1. Open the Agent 365 admin center for the tenant matching `ENTRA_TENANT_ID`.
 2. Find the agent in the **Agent Registry** by the `--display-name` used with `create-agent-identity`.
-3. Its detail page shows identity metadata, permissions/posture, and activity (sign-ins, token issuance, and any tool/action telemetry the remote Foundry agent reports) for that identity — i.e. every request this Databricks app forwards to Foundry.
-4. Pair this tenant-wide view with the MLflow tracing already configured for this app (see [Manual local development loop setup](#manual-local-development-loop-setup) step 3) for per-request detail on how the Databricks app itself handled a call — Agent 365 observability and MLflow tracing are complementary, not substitutes for each other.
+3. Its detail page shows identity metadata, permissions/consent status, and sign-in activity for that identity.
+
+Seeing agent **actions** (tool calls, LLM inference) in Agent 365 is a separate, opt-in step: it requires instrumenting the agent process with the `microsoft-agents-a365-observability-core` Python SDK (OpenTelemetry-based, from [microsoft/Agent365-python](https://github.com/microsoft/Agent365-python)) — it does not happen automatically just because the identity is registered. This template does not ship that instrumentation by default; pair the identity/registry view with the MLflow tracing already configured for this app (see [Manual local development loop setup](#manual-local-development-loop-setup) step 3) for per-request detail on how the Databricks app itself handled a call.
 
 For the full identity → deploy → verify workflow, including secret-scope wiring and where to check status on both the Databricks and Entra sides, see the **agent-365-observability** skill at `.claude/skills/agent-365-observability/SKILL.md`.
 

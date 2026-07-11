@@ -13,7 +13,7 @@ This skill covers the full lifecycle for this template's identity layer:
 4. Viewing the agent and its actions in Agent 365 once your Databricks workspace/agent is connected
 5. Detailed guidance for deploying the agent on Databricks so it shows up correctly end-to-end
 
-> Agent 365 is a fast-moving product surface. Always cross-check exact portal navigation and CLI command syntax against the current [Microsoft Entra Agent ID docs](https://learn.microsoft.com/en-us/entra/agent-id/) and Agent 365 admin center documentation before following steps verbatim — screens and command names may shift between previews.
+> Verified against the public repos [microsoft/Agent365-Samples](https://github.com/microsoft/Agent365-Samples), [microsoft/Agent365-python](https://github.com/microsoft/Agent365-python), and [microsoft/Agent365-devTools](https://github.com/microsoft/Agent365-devTools) (the CLI source). All are in active development with beta/prerelease packages, so re-check command names and package versions against those repos before scripting them into automation.
 
 ## 1. Background: how identity ties this repo to Agent 365
 
@@ -22,7 +22,12 @@ Microsoft Agent 365 is built **on top of Microsoft Entra Agent ID**. Every agent
 - an **agent identity blueprint** (`microsoft.graph.agentIdentityBlueprint`) — a reusable template for a class of agents
 - an **agent identity** (`microsoft.graph.agentIdentity`, a service principal) — the concrete, auditable identity for one running agent instance, with its own credentials, permissions, and sign-in/activity logs
 
-This template already provisions exactly those two objects via `scripts/create_agent_identity.py` (the `create-agent-identity` command — see the **quickstart** skill for local setup). Because the agent identity is a first-class Entra object, **the same identity created for Foundry A2A authentication is what Agent 365 discovers and displays** once the tenant's Agent 365 registry is enabled — you do not need a separate identity just for Agent 365.
+This template already provisions exactly those two objects via `scripts/create_agent_identity.py` (the `create-agent-identity` command — see the **quickstart** skill for local setup). The same identity created for Foundry A2A authentication is the identity Agent 365 registers and can subsequently display in its **Agent Registry**.
+
+Important distinction confirmed against the Agent 365 SDK repos: **creating the Entra identity is not the same as getting agent "action" telemetry into Agent 365.** Two separate things ride on this identity:
+
+- **Registry/identity metadata** (blueprint, permissions, consent, sign-ins) — visible once the identity is registered in Agent 365, no extra code needed.
+- **Agent/tool/LLM-call telemetry** ("actions") — only shows up if the agent process is instrumented with the **Microsoft Agent 365 SDK's observability package**, described in section 4.
 
 ## 2. Provisioning the agent identity blueprint (this repo)
 
@@ -50,35 +55,70 @@ Prerequisites: authenticate with `az login` (or another `DefaultAzureCredential`
 
 ## 3. The Agent 365 CLI as an option
 
-Microsoft ships an Agent 365 CLI (surfaced through the Microsoft 365 / Entra Agent ID admin tooling) as an alternative to calling the Graph API directly. Consider it when:
+Microsoft publishes an official **Agent 365 DevTools CLI** ([microsoft/Agent365-devTools](https://github.com/microsoft/Agent365-devTools)) as a supported alternative to hand-rolling Graph API calls like `create-agent-identity` does. It is a .NET global tool:
 
-- You want to **enroll** an already-created agent identity into the Agent 365 registry without hand-rolling Graph calls.
-- You need to run registry/enrollment operations from CI/CD (e.g., as part of the same pipeline that runs `databricks bundle deploy`), rather than through the admin portal UI.
-- You want to script bulk **discovery** of shadow/unregistered agents across a tenant before onboarding this one.
+```bash
+# Requires .NET 8.0+
+dotnet tool install -g Microsoft.Agents.A365.DevTools.Cli --prerelease
+a365 -h
+```
 
-Typical flow when using the CLI in addition to this repo's script:
+Before first use, the CLI needs **its own custom Entra ID app registration** with **delegated** (not application) Microsoft Graph permissions, granted admin consent — this is separate from, and in addition to, the agent identity blueprint/identity objects it manages on your behalf. See the CLI repo's "Custom Client App Registration" setup guide for the exact permission set.
 
-1. Install and authenticate the CLI against the same tenant you used for `create-agent-identity` (it must resolve the same Entra tenant as `ENTRA_TENANT_ID` in your `.env`).
-2. Use the CLI's registry/enroll command, passing the **agent identity's `appId`/object ID** created in step 2 above — do not create a second, disconnected identity.
-3. Confirm enrollment succeeded by checking the agent's status in the Agent 365 admin center (or the CLI's status/get command).
+Key commands relevant to this template:
 
-> Because CLI command names are still evolving in preview, confirm the exact subcommands (install, login, register/enroll, status) against the current Microsoft Agent 365 CLI reference before scripting them into automation. If the CLI isn't available/enrolled in your tenant yet, the Graph-based `create-agent-identity` script plus manual registration through the Agent 365 admin center is a fully supported fallback.
+| Command | Purpose |
+|---|---|
+| `a365 setup` | Creates Azure resources, configures permissions, and registers your agent blueprint for deployment — covers the same ground as `create-agent-identity`, driven interactively/declaratively instead of via the Graph script |
+| `a365 query-entra` | Query Microsoft Entra ID for agent information (scopes, permissions, consent status) — use this to check whether/how an identity is registered |
+| `a365 publish` | Update agent manifest IDs and package the manifest for upload to the Microsoft 365 Admin Center (then "hire" the agent through Teams to complete onboarding) |
+| `a365 cleanup` | Deletes all resources (blueprint, instance, other Azure resources) it created |
+| `a365 develop` / `a365 develop-mcp` | Manage MCP tool servers for local agent development (including Dataverse-hosted MCP servers) |
+| `a365 logs` | Export redacted CLI diagnostic logs safe to share with Microsoft support |
 
-## 4. Viewing the agent and its actions in Agent 365
+For this template, either path works — `a365 setup` if you want an interactive, opinionated flow and don't mind installing the .NET SDK, or `uv run create-agent-identity` if you want a lightweight Python/Graph-only flow with no additional runtime dependency. Don't run both against the same display name without checking `a365 query-entra` first, to avoid creating duplicate/orphaned blueprint objects.
 
-Once the agent identity created in step 2 is registered/enrolled in Agent 365 (via the CLI or the admin center), you can see it and its activity from the Agent 365 side without any further Databricks-side configuration, because the identity — not the app — is what Agent 365 tracks:
+## 4. Viewing the agent — and its actions — in Agent 365
 
-1. Open the **Agent 365 admin center** (or the Agent 365 pane inside the Microsoft 365 admin center) for the tenant that matches `ENTRA_TENANT_ID`.
-2. Go to the **Agent Registry** and locate the agent by the `--display-name` you used in `create-agent-identity` (e.g. `agent-langgraph-foundry`).
-3. Open the agent's detail page to see:
-   - **Identity details** — the same `appId`/object ID and credential metadata produced by `create-agent-identity`
-   - **Activity / observability** — sign-ins, token issuance, and (where the remote Foundry agent emits them) tool/action telemetry for that identity
-   - **Permissions and posture** — what the identity is scoped to access, useful for confirming least-privilege before wiring it into `databricks.yml` secrets
-4. Because this template's agent runs as a **passthrough** to a remote Foundry A2A agent (`agent_server/a2a_client.py`), the "actions" you see against this identity in Agent 365 reflect calls authenticated with that identity — i.e., every request Databricks forwards to Foundry. For agent-turn-level detail (what the Databricks app itself received/returned), pair this with the MLflow tracing already configured for this app (see the `quickstart` and `run-locally` skills) — Agent 365 observability and MLflow tracing are complementary, not a replacement for each other:
-   - **Agent 365** = tenant-wide identity, registry, and cross-agent governance view.
-   - **MLflow tracing (this repo)** = per-request trace of the Databricks app's own invoke/stream handling.
+Once the agent identity is registered in Agent 365 (via `a365 setup`/`a365 publish` or manual admin-center registration of the identity `create-agent-identity` produced), the **registry and identity metadata** show up immediately:
 
-If the agent doesn't appear in the registry yet, it typically means the identity hasn't been enrolled (see step 3) — enrollment, not identity creation, is what makes it visible in Agent 365.
+1. Open the **Agent 365 admin center** for the tenant that matches `ENTRA_TENANT_ID`.
+2. Go to the **Agent Registry** and locate the agent by the `--display-name` you used in `create-agent-identity` / `a365 setup`.
+3. Its detail page shows identity metadata (the same `appId`/object ID and credential info produced during provisioning), permissions/consent status, and sign-in activity for that identity. You can cross-check this from the CLI with `a365 query-entra`.
+
+**Seeing agent *actions* (tool calls, LLM inference, agent turns) is a separate, opt-in step** — it does **not** happen automatically just because the identity exists. Agent 365 gets action-level telemetry only from agents instrumented with the **Microsoft Agent 365 observability SDK**, which is OpenTelemetry-based:
+
+```bash
+pip install microsoft-agents-a365-observability-core
+```
+
+```python
+from microsoft_agents_a365.observability.core import configure
+
+# Call after any existing OTel SDK setup (e.g. azure-monitor-opentelemetry, or a manual
+# TracerProvider + OTLPSpanExporter) — configure() attaches its processors to the
+# existing TracerProvider rather than replacing it.
+configure(
+    service_name="agent-langgraph-foundry",
+    service_namespace="dbx-langgraph",
+    token_resolver=my_token_resolver,  # resolves a token for the Agent 365 backend
+)
+```
+
+Two env vars gate whether spans are produced/exported at all — the SDK **silently emits zero spans** if these are missing:
+
+- `ENABLE_OBSERVABILITY=true` (or `ENABLE_A365_OBSERVABILITY_EXPORTER=true`, depending on SDK version — check the `.env.template` in the [`python/observability-with-otlp`](https://github.com/microsoft/Agent365-Samples/tree/main/python/observability-with-otlp) sample) enables span creation.
+- A working `token_resolver` is required for spans to actually reach the Agent 365 backend (without one, `configure()` falls back to a local `ConsoleSpanExporter`).
+
+**This template does not currently ship this instrumentation.** `agent_server/a2a_client.py` is a raw `httpx`-based A2A client — it isn't built on the OpenAI Agents SDK, LangChain, Semantic Kernel, or Microsoft Agent Framework, so none of the four auto-instrumentation extension packages (`microsoft-agents-a365-observability-extensions-{openai,langchain,semantickernel,agentframework}`) apply out of the box. If you want this agent's Foundry calls to show up as Agent 365 spans, wrap the request/response handling in `agent_server/a2a_client.py` with the SDK's manual scopes — `InvokeAgentScope` around a full turn, `InferenceScope` around each LLM call, `ExecuteToolScope` around each tool/action — following the pattern in the [`python/observability-with-otlp`](https://github.com/microsoft/Agent365-Samples/tree/main/python/observability-with-otlp) sample, which demonstrates exactly this "manual OTel + manual instrumentation" combination.
+
+Until that instrumentation is added, treat the two observability surfaces as covering different things, not as duplicates of each other:
+
+- **Agent 365 registry/identity view** — tenant-wide identity, permissions, consent, sign-in activity. Available today from the identity alone.
+- **MLflow tracing (this repo)** — per-request trace of the Databricks app's own invoke/stream handling. Already configured (see `quickstart` / `run-locally` skills).
+- **Agent 365 action/tool spans** — requires adding the observability SDK to `agent_server/`; not present by default in this template.
+
+If the agent doesn't appear in the registry at all, it typically means the identity hasn't been registered/enrolled yet (section 3) — registration, not identity creation, is what makes it visible in Agent 365.
 
 ## 5. Deploying this agent on Databricks (detailed)
 
@@ -95,7 +135,7 @@ Follow this order so the identity, the app, and the observability views all agre
 5. **Validate the bundle**: `databricks bundle validate`.
 6. **Deploy**: `databricks bundle deploy` (uploads code + provisions resources declared in `databricks.yml`).
 7. **Start/restart the app**: `databricks bundle run agent_langgraph` — required after every deploy; `bundle deploy` alone does not restart the running app.
-8. **Verify end-to-end**: query the deployed app (see README "Query your agent hosted on Databricks Apps"), then confirm the corresponding identity activity shows up both in MLflow tracing (Databricks side) and in the Agent 365 registry/activity view (Entra side) for the same `ENTRA_AGENT_CLIENT_ID`.
+8. **Verify end-to-end**: query the deployed app (see README "Query your agent hosted on Databricks Apps"), then confirm the identity's sign-in activity shows up in the Agent 365 registry view (Entra side) for the same `ENTRA_AGENT_CLIENT_ID`, and that requests are traced in MLflow (Databricks side). Action-level spans will only appear in Agent 365 once the observability SDK from section 4 is added to `agent_server/`.
 
 For app-binding errors ("An app with the same name already exists") or provider drift errors during deploy, see the **deploy** skill and the README "Common Issues" section — those are unrelated to identity/Agent 365 setup and are handled the same way regardless.
 
@@ -104,3 +144,10 @@ For app-binding errors ("An app with the same name already exists") or provider 
 - **quickstart** — local environment + `.env` setup, including running `create-agent-identity`
 - **deploy** — Databricks Asset Bundle deploy mechanics, binding existing apps, troubleshooting deploy errors
 - **run-locally** — testing the agent and inspecting MLflow traces locally before deploying
+
+## Reference repos (verified)
+
+- [microsoft/Agent365-Samples](https://github.com/microsoft/Agent365-Samples) — sample agents and prompts across C#/.NET, Python, Node.js/TypeScript, and Salesforce/Apex, including the `python/observability-with-otlp` and `python/observability-with-azure-monitor` samples referenced above
+- [microsoft/Agent365-python](https://github.com/microsoft/Agent365-python) — source for `microsoft-agents-a365-observability-core` and related Python packages (notifications, runtime, tooling, framework extensions)
+- [microsoft/Agent365-devTools](https://github.com/microsoft/Agent365-devTools) — source for the `a365` DevTools CLI (`Microsoft.Agents.A365.DevTools.Cli`)
+- [microsoft/Agent365-dotnet](https://github.com/microsoft/Agent365-dotnet) / [microsoft/Agent365-nodejs](https://github.com/microsoft/Agent365-nodejs) — equivalent SDKs for .NET and Node.js/TypeScript agents

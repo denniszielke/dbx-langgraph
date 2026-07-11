@@ -120,6 +120,7 @@ After installation, the skills will be available as slash commands (e.g., `/agen
 | Long-term memory — managed/governed alternative | **managed-memory** | `.claude/skills/managed-memory/SKILL.md` |
 | Offload agent loop to Databricks | **supervisor-api** | `.claude/skills/supervisor-api/SKILL.md` |
 | Long-running background tasks | **supervisor-api-background-mode** | `.claude/skills/supervisor-api-background-mode/SKILL.md` |
+| Entra Agent ID blueprint & Agent 365 observability | **agent-365-observability** | `.claude/skills/agent-365-observability/SKILL.md` |
 
 **Note:** All agent skills are located in `.claude/skills/` directory.
 
